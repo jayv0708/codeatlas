@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+
+# Environment — never commit secrets
+.env
+.env.local
+.env*.local
+
+# Tests
+coverage/
+
+# Logs & OS
+*.log
+.DS_Store
+
+# Local data (repo clones, uploads — Phase 3+)
+data/
+
+# Prisma
+prisma/dev.db*
+
+# Runner / Preview artifacts
+.freebuff/

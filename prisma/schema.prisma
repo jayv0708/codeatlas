@@ -1,0 +1,248 @@
+// CodeAtlas — Prisma schema
+// Phase 2: authentication foundation (User / Account / Session / VerificationToken)
+// Repository is PREPARED for Phase 3 (no GitHub integration exists yet).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Auth.js (NextAuth v5) models ────────────────────────────────────────────
+// Field names/shapes must match @auth/prisma-adapter expectations exactly.
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  repositories  Repository[]
+  conversations Conversation[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? // @db.Text
+  access_token      String? // @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? // @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ── Application models ──────────────────────────────────────────────────────
+// Phase 3: repository connection + ingestion. `status` drives the ingestion
+// lifecycle: NOT_CONNECTED → QUEUED → INDEXING → INDEXED (or FAILED).
+// `progress` (0–100) is mirrored by the active IngestionJob for the UI.
+
+model Repository {
+  id            String    @id @default(cuid())
+  userId        String
+  name          String
+  githubId      BigInt?   @unique
+  fullName      String?
+  description   String?
+  defaultBranch String?
+  language      String?
+  isPrivate     Boolean   @default(false)
+  status        String    @default("NOT_CONNECTED")
+  progress      Int       @default(0)
+  lastError     String?
+  indexedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files         RepoFile[]
+  symbols       Symbol[]
+  dependencies  Dependency[]
+  ingestionJobs IngestionJob[]
+  conversations Conversation[]
+  codeChunks    CodeChunk[]
+
+  @@unique([userId, fullName])
+  @@index([userId])
+  @@index([userId, status])
+}
+
+model RepoFile {
+  id           String   @id @default(cuid())
+  repositoryId String
+  path         String
+  language     String?
+  content      String?
+  size         Int      @default(0)
+  sha          String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  repository   Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  symbols      Symbol[]
+  dependencies Dependency[]
+  chunks       CodeChunk[]
+
+  @@unique([repositoryId, path])
+  @@index([repositoryId, language])
+}
+
+model Symbol {
+  id           String @id @default(cuid())
+  repositoryId String
+  fileId       String
+  name         String
+  type         String // class | function | method | interface | type | import | export
+  startLine    Int
+  endLine      Int
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  file       RepoFile   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId, fileId])
+  @@index([repositoryId, type])
+  @@index([repositoryId, name])
+}
+
+model Dependency {
+  id           String  @id @default(cuid())
+  repositoryId String
+  fileId       String
+  sourcePath   String
+  target       String
+  targetPath   String?
+  kind         String  @default("import")
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  file       RepoFile   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId])
+  @@index([repositoryId, fileId])
+}
+
+model IngestionJob {
+  id             String    @id @default(cuid())
+  repositoryId   String
+  status         String    @default("QUEUED") // QUEUED | RUNNING | COMPLETED | FAILED
+  stage          String?
+  progress       Int       @default(0)
+  error          String?
+  filesProcessed Int       @default(0)
+  totalFiles     Int       @default(0)
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId, status])
+}
+
+// ── Phase 4: RAG + Chat ─────────────────────────────────────────────────────
+// Code chunks are semantic slices of source files (functions, classes, modules).
+// Embeddings are fixed-dimension vectors derived from chunk text for pgvector search.
+
+model CodeChunk {
+  id           String   @id @default(cuid())
+  repositoryId String
+  fileId       String
+  path         String // redundant with RepoFile.path for fast search
+  language     String?
+  chunkType    String // function | class | module | block | header
+  symbolName   String?
+  content      String   @db.Text
+  startLine    Int
+  endLine      Int
+  tokenCount   Int      @default(0)
+  hash         String // SHA-256 of content for dedup
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  file       RepoFile   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  embedding  Embedding?
+
+  @@unique([repositoryId, hash])
+  @@index([repositoryId])
+  @@index([repositoryId, fileId])
+  @@index([repositoryId, chunkType])
+  @@index([repositoryId, language])
+}
+
+model Embedding {
+  id        String                     @id @default(cuid())
+  chunkId   String                     @unique
+  vector    Unsupported("vector(384)")
+  model     String                     @default("ngram-rp")
+  createdAt DateTime                   @default(now())
+
+  chunk CodeChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  @@index([id])
+}
+
+model Conversation {
+  id           String   @id @default(cuid())
+  repositoryId String
+  userId       String
+  title        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@index([repositoryId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String // user | assistant | system
+  content        String   @db.Text
+  evidence       Json? // { files: [{ path, startLine, endLine, reason }] }
+  tokenCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}

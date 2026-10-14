@@ -1,0 +1,58 @@
+[
+  {
+    "id": "eval-001",
+    "question": "How does authentication work in this project?",
+    "expected_evidence_files": ["auth", "session", "middleware"],
+    "expected_keywords": ["session", "token", "Auth.js", "NextAuth"],
+    "category": "authentication"
+  },
+  {
+    "id": "eval-002",
+    "question": "Where is the database connection created?",
+    "expected_evidence_files": ["db", "prisma", "client"],
+    "expected_keywords": ["Prisma", "DATABASE_URL", "connection"],
+    "category": "database"
+  },
+  {
+    "id": "eval-003",
+    "question": "Which files handle user registration?",
+    "expected_evidence_files": ["user", "register", "signup", "auth"],
+    "expected_keywords": ["user", "create", "email"],
+    "category": "registration"
+  },
+  {
+    "id": "eval-004",
+    "question": "How does the GitHub OAuth flow work?",
+    "expected_evidence_files": ["github", "oauth", "auth"],
+    "expected_keywords": ["GitHub", "OAuth", "token", "scope"],
+    "category": "oauth"
+  },
+  {
+    "id": "eval-005",
+    "question": "What does the ingest process do?",
+    "expected_evidence_files": ["ingest", "runner", "parser"],
+    "expected_keywords": ["ingestion", "file", "parse", "index"],
+    "category": "ingestion"
+  },
+  {
+    "id": "eval-006",
+    "question": "How are embeddings generated?",
+    "expected_evidence_files": ["embedding", "chunk", "vector"],
+    "expected_keywords": ["embedding", "chunk", "vector", "pgvector"],
+    "category": "ai"
+  },
+  {
+    "id": "eval-007",
+    "question": "What is the API error response format?",
+    "expected_evidence_files": ["api", "error"],
+    "expected_keywords": ["error", "code", "message", "status"],
+    "category": "api"
+  },
+  {
+    "id": "eval-008",
+    "question": "What test framework is used?",
+    "expected_evidence_files": ["test", "vitest", "jest"],
+    "expected_keywords": ["vitest", "test", "describe", "it"],
+    "category": "testing"
+  }
+]
